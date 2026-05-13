@@ -1,0 +1,22 @@
+TITLE: Account Balance Display
+
+USER STORY:
+As a bank customer I want to see my account balance
+on the dashboard so that I know how much money I have available.
+
+ACCEPTANCE CRITERIA:
+- Authenticated users see their balance on the dashboard
+- Balance reflects real-time data updated every 30 seconds
+- Unauthenticated users are redirected to the login page
+- Balance displays in USD format with 2 decimal places
+- Zero balance displays as $0.00 not blank
+
+TECHNICAL NOTES:
+- Use GET /api/accounts/{id}/balance endpoint
+- Bearer token required in Authorization header
+- Response time must be under 2 seconds
+
+DEFINITION OF DONE:
+- All acceptance criteria have test cases in Xray
+- Automated tests passing in CI/CD pipeline
+- Code reviewed and approved

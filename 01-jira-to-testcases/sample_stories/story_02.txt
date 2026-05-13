@@ -1,0 +1,22 @@
+TITLE: User Login Authentication
+
+USER STORY:
+As a bank customer I want to log in securely
+so that I can access my account information safely.
+
+ACCEPTANCE CRITERIA:
+- Valid credentials redirect to dashboard
+- Invalid credentials show error message
+- Account locks after 3 failed attempts
+- Session expires after 15 minutes of inactivity
+- Password field masks characters during input
+
+TECHNICAL NOTES:
+- POST /api/auth/login endpoint
+- Returns JWT token on success
+- Failed attempts logged for security audit
+
+DEFINITION OF DONE:
+- Security scenarios tested and passing
+- Penetration testing completed
+- Audit logging verified
