@@ -1,0 +1,31 @@
+# Virtual Environment — never commit this
+.venv/
+venv/
+env/
+
+# Python cache files — auto-generated, not needed
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Environment variables — NEVER commit credentials
+.env
+*.env
+
+# PyCharm project files
+.idea/
+
+# Test reports — generated output
+reports/
+*.html
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
