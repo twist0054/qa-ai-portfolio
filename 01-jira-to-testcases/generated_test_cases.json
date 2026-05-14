@@ -1,0 +1,167 @@
+[
+  {
+    "tcid": "TC-001",
+    "summary": "Authenticated user views account balance on dashboard",
+    "description": "Verify that an authenticated user can successfully view their account balance displayed on the dashboard",
+    "action": "1. Navigate to the bank application login page\n2. Enter valid credentials (username and password)\n3. Click the Login button\n4. Wait for dashboard to load\n5. Observe the account balance section on the dashboard",
+    "data_steps": "Valid user credentials: username=testuser@bank.com, password=ValidPass123!, Account ID=ACC-12345, Expected balance=$1,234.56",
+    "expected_results": "User is authenticated successfully and redirected to dashboard. Account balance is displayed prominently showing the correct amount in USD format with 2 decimal places",
+    "complexity": "Low",
+    "priority": "Critical",
+    "test_type": "Functional"
+  },
+  {
+    "tcid": "TC-002",
+    "summary": "Balance auto-refreshes every 30 seconds",
+    "description": "Verify that the account balance automatically updates with real-time data every 30 seconds without manual page refresh",
+    "action": "1. Login with valid credentials\n2. Navigate to dashboard\n3. Note the current balance and timestamp\n4. Make an external transaction to change balance\n5. Wait exactly 30 seconds without refreshing\n6. Observe if balance updates automatically\n7. Verify network calls in browser developer tools",
+    "data_steps": "Valid user credentials, Initial balance=$5,000.00, External deposit amount=$100.00, Expected new balance=$5,100.00",
+    "expected_results": "Balance automatically refreshes at 30-second intervals. Network tab shows GET /api/accounts/{id}/balance call every 30 seconds. Updated balance reflects the new amount after refresh cycle",
+    "complexity": "Medium",
+    "priority": "High",
+    "test_type": "Functional"
+  },
+  {
+    "tcid": "TC-003",
+    "summary": "Unauthenticated user redirected to login page",
+    "description": "Verify that users without valid authentication are redirected to the login page when attempting to access the dashboard",
+    "action": "1. Clear all browser cookies and session storage\n2. Attempt to directly access dashboard URL (/dashboard)\n3. Observe the page behavior\n4. Verify the redirect URL",
+    "data_steps": "No authentication credentials, Direct URL access to dashboard: https://app.bank.com/dashboard",
+    "expected_results": "User is immediately redirected to the login page (/login). Dashboard content is not visible. No balance information is exposed. URL shows login page path",
+    "complexity": "Low",
+    "priority": "Critical",
+    "test_type": "Security"
+  },
+  {
+    "tcid": "TC-004",
+    "summary": "Balance displays in USD format with 2 decimal places",
+    "description": "Verify that the account balance is formatted correctly with USD currency symbol and exactly 2 decimal places",
+    "action": "1. Login with valid credentials\n2. Navigate to dashboard\n3. Observe the balance display format\n4. Verify currency symbol position\n5. Verify decimal places count\n6. Check for thousand separators if applicable",
+    "data_steps": "User with balance of 12345.6789 in database, Expected display format=$12,345.68",
+    "expected_results": "Balance displays with $ symbol prefix, exactly 2 decimal places (rounded if necessary), comma thousand separators for amounts over 999.99. Example: $12,345.68",
+    "complexity": "Low",
+    "priority": "High",
+    "test_type": "Functional"
+  },
+  {
+    "tcid": "TC-005",
+    "summary": "Zero balance displays as $0.00",
+    "description": "Verify that an account with zero balance displays as $0.00 and not as blank, empty, or null",
+    "action": "1. Login with user account having zero balance\n2. Navigate to dashboard\n3. Observe the balance display area\n4. Verify the exact text shown for balance",
+    "data_steps": "User credentials for zero-balance account: username=zerobalance@bank.com, password=ValidPass123!, Account balance=0",
+    "expected_results": "Balance section displays exactly $0.00. Field is not blank, empty, null, or showing any error message. Format follows USD standard with dollar sign and two decimal places",
+    "complexity": "Low",
+    "priority": "High",
+    "test_type": "Edge Case"
+  },
+  {
+    "tcid": "TC-006",
+    "summary": "API response time under 2 seconds",
+    "description": "Verify that the balance API endpoint responds within the required 2-second threshold under normal conditions",
+    "action": "1. Login with valid credentials\n2. Open browser developer tools Network tab\n3. Navigate to dashboard or trigger balance refresh\n4. Locate the GET /api/accounts/{id}/balance request\n5. Record the response time\n6. Repeat 5 times and calculate average",
+    "data_steps": "Valid authentication token, Account ID=ACC-12345, Performance threshold=2000ms",
+    "expected_results": "Each API call to /api/accounts/{id}/balance completes in under 2 seconds. Average response time across multiple calls remains below threshold. No timeout errors occur",
+    "complexity": "Medium",
+    "priority": "High",
+    "test_type": "Functional"
+  },
+  {
+    "tcid": "TC-007",
+    "summary": "Invalid Bearer token returns unauthorized error",
+    "description": "Verify that requests with invalid or malformed Bearer tokens are rejected with appropriate error response",
+    "action": "1. Open API testing tool (Postman/curl)\n2. Send GET request to /api/accounts/{id}/balance\n3. Include invalid Bearer token in Authorization header\n4. Observe response status and body\n5. Repeat with malformed token format",
+    "data_steps": "Invalid token=Bearer invalid_token_12345, Malformed token=Bearer xyz!@#$%^&*, Expired token=Bearer expired_token_abc, Account ID=ACC-12345",
+    "expected_results": "API returns HTTP 401 Unauthorized status. Response body contains appropriate error message. No balance data is leaked in error response. Request is logged for security audit",
+    "complexity": "Medium",
+    "priority": "Critical",
+    "test_type": "Security"
+  },
+  {
+    "tcid": "TC-008",
+    "summary": "Missing Authorization header rejected",
+    "description": "Verify that API requests without Authorization header are properly rejected",
+    "action": "1. Open API testing tool\n2. Send GET request to /api/accounts/{id}/balance\n3. Do not include any Authorization header\n4. Observe response status and body",
+    "data_steps": "Account ID=ACC-12345, No Authorization header present",
+    "expected_results": "API returns HTTP 401 Unauthorized status. Error message indicates missing authentication. No balance information is returned. System does not crash or expose sensitive data",
+    "complexity": "Low",
+    "priority": "Critical",
+    "test_type": "Negative"
+  },
+  {
+    "tcid": "TC-009",
+    "summary": "Access balance of another user's account",
+    "description": "Verify that authenticated users cannot access balance information of other users' accounts (IDOR prevention)",
+    "action": "1. Login as User A with valid credentials\n2. Capture the valid Bearer token\n3. Send GET request to /api/accounts/{User_B_ID}/balance\n4. Use User A's token but User B's account ID\n5. Observe response",
+    "data_steps": "User A token=Bearer valid_token_userA, User B Account ID=ACC-67890 (belongs to different user)",
+    "expected_results": "API returns HTTP 403 Forbidden status. Error message indicates access denied. User B's balance is not exposed. Attempt is logged for security monitoring",
+    "complexity": "Medium",
+    "priority": "Critical",
+    "test_type": "Security"
+  },
+  {
+    "tcid": "TC-010",
+    "summary": "SQL injection attempt in account ID parameter",
+    "description": "Verify that the API is protected against SQL injection attacks through the account ID parameter",
+    "action": "1. Login with valid credentials\n2. Capture valid Bearer token\n3. Send GET request with SQL injection payload in account ID\n4. Try multiple injection patterns\n5. Observe responses for each attempt",
+    "data_steps": "Injection payloads: 1) ACC-12345' OR '1'='1, 2) ACC-12345; DROP TABLE accounts;--, 3) ACC-12345 UNION SELECT * FROM users--, Valid Bearer token",
+    "expected_results": "API returns HTTP 400 Bad Request or sanitizes input. No database errors exposed. No unauthorized data returned. Application continues to function normally. Attack attempts are logged",
+    "complexity": "High",
+    "priority": "Critical",
+    "test_type": "Security"
+  },
+  {
+    "tcid": "TC-011",
+    "summary": "Large balance amount display formatting",
+    "description": "Verify that very large balance amounts are displayed correctly with proper formatting",
+    "action": "1. Login with user having large balance\n2. Navigate to dashboard\n3. Observe balance display\n4. Verify all digits are visible\n5. Check thousand separator placement",
+    "data_steps": "User with balance=$999,999,999.99 (near billion), User credentials for high-balance test account",
+    "expected_results": "Balance displays correctly as $999,999,999.99. All digits are visible without truncation. Thousand separators are correctly placed. No overflow or display issues occur",
+    "complexity": "Medium",
+    "priority": "Medium",
+    "test_type": "Edge Case"
+  },
+  {
+    "tcid": "TC-012",
+    "summary": "Balance display with negative amount (overdraft)",
+    "description": "Verify that negative balance (overdraft) is displayed correctly with appropriate formatting and visual indication",
+    "action": "1. Login with user account in overdraft status\n2. Navigate to dashboard\n3. Observe the balance display\n4. Check for negative indicator and formatting",
+    "data_steps": "User with negative balance=-$150.75 (overdraft account), Test account credentials",
+    "expected_results": "Negative balance displays with minus sign or parentheses: -$150.75 or ($150.75). Visual indication of negative status (red color or warning). Format maintains 2 decimal places",
+    "complexity": "Medium",
+    "priority": "Medium",
+    "test_type": "Edge Case"
+  },
+  {
+    "tcid": "TC-013",
+    "summary": "Session expiry during balance auto-refresh",
+    "description": "Verify proper handling when user session expires during the 30-second auto-refresh cycle",
+    "action": "1. Login with valid credentials\n2. Navigate to dashboard\n3. Wait for balance to display\n4. Manually expire/invalidate the session token on server side\n5. Wait for next 30-second refresh cycle\n6. Observe application behavior",
+    "data_steps": "Valid user session initially, Session invalidation after initial load, Refresh cycle timing=30 seconds",
+    "expected_results": "Application detects authentication failure on refresh. User is notified of session expiry. User is redirected to login page. No sensitive error details exposed. Previous balance data is cleared from view",
+    "complexity": "High",
+    "priority": "High",
+    "test_type": "Negative"
+  },
+  {
+    "tcid": "TC-014",
+    "summary": "API server unavailable during balance fetch",
+    "description": "Verify graceful handling when the balance API endpoint is unavailable or returns server error",
+    "action": "1. Login with valid credentials\n2. Simulate API server downtime or 500 error\n3. Navigate to dashboard or wait for refresh\n4. Observe error handling\n5. Verify retry mechanism if implemented",
+    "data_steps": "Valid user credentials, Simulated API response: HTTP 500 Internal Server Error or connection timeout",
+    "expected_results": "User-friendly error message is displayed (not technical stack trace). Application suggests retry or displays last known balance with timestamp. System does not crash. Error is logged for monitoring",
+    "complexity": "Medium",
+    "priority": "High",
+    "test_type": "Negative"
+  },
+  {
+    "tcid": "TC-015",
+    "summary": "Balance with fractional cents rounding",
+    "description": "Verify correct rounding behavior when balance contains more than 2 decimal places from backend",
+    "action": "1. Setup account with balance having multiple decimal places in database\n2. Login with valid credentials\n3. Navigate to dashboard\n4. Observe displayed balance\n5. Verify rounding logic (standard banker's rounding)",
+    "data_steps": "Database balance values: 1) 100.994 (should round to $100.99), 2) 100.995 (should round to $101.00), 3) 100.996 (should round to $101.00)",
+    "expected_results": "Balance is rounded to exactly 2 decimal places using standard rounding rules. 100.994 displays as $100.99. 100.995 displays as $101.00. No floating-point display errors occur",
+    "complexity": "Medium",
+    "priority": "Medium",
+    "test_type": "Edge Case"
+  }
+]
