@@ -1,7 +1,6 @@
-# Xray CSV Exporter — SQAI-12
-# Purpose: Map AI-generated test cases to Xray CSV format
-# Input:   List of test case dictionaries from SQAI-11
-# Output:  CSV file ready for JIRA Xray Test Case Importer
+# Xray CSV Exporter — SQAI-12 (Bug Fix SQAI-30)
+# Purpose: Map AI-generated test cases to Xray Manual Test CSV format
+# Fix:     Each test step exported as individual CSV row
 # Author:  Sergio Juarez — SergioQE Portfolio
 
 import csv
@@ -10,78 +9,80 @@ import json
 from datetime import datetime
 
 
-# Default project configuration
-# These values populate the Xray fields automatically
 DEFAULT_CONFIG = {
-    "application":        "SergioQE Portfolio",
-    "project_name":       "SergioQE",
-    "project_id":         "SQAI",
-    "assignee":           "sergio.juarez",
-    "label_release":      "Sprint-1",
-    "automated_control":  "Manual",
-    "test_design_status": "Draft",
-    "crew":               "QA-Team-Alpha",
+    "application":          "SergioQE Portfolio",
+    "project_name":         "SergioQE",
+    "project_id":           "SQAI",
+    "assignee":             "sergio.juarez",
+    "label_release":        "Sprint-1",
+    "automated_control":    "Manual",
+    "test_design_status":   "Draft",
+    "crew":                 "QA-Team-Alpha",
     "test_repository_path": "/SergioQE/Epic1-Xray-Agent"
 }
 
-# All 18 Xray CSV column headers
 XRAY_HEADERS = [
-    "TCID",
-    "Application",
-    "Project Name",
-    "Project ID",
-    "Summary",
-    "Description",
-    "Action",
-    "Data Steps",
-    "Expected Results",
-    "Test Case Complexity",
-    "Priority",
-    "Assignee",
-    "Label Release",
-    "Automated Control",
-    "Test Repository Path",
-    "Crew",
+    "Test ID",
+    "Issue Type",
+    "Test Summary",
+    "Test Priority",
     "Test Type",
-    "Test Design Status"
+    "Assignee",
+    "Labels",
+    "Test Repo Path",
+    "Action",
+    "Data",
+    "Expected Result"
 ]
 
 
-def map_to_xray_row(test_case, config=None):
+def get_steps(test_case):
     """
-    Maps a single AI-generated test case to a full Xray CSV row.
-    Uses DEFAULT_CONFIG for project-level fields.
+    Extracts steps from a test case.
+    Handles both new format (steps array) and
+    old format (action string).
     """
-    if config is None:
-        config = DEFAULT_CONFIG
+    # New format — steps is an array of objects
+    if "steps" in test_case and isinstance(
+            test_case["steps"], list):
+        return test_case["steps"]
 
-    return [
-        test_case.get("tcid", ""),
-        config["application"],
-        config["project_name"],
-        config["project_id"],
-        test_case.get("summary", ""),
-        test_case.get("description", ""),
-        test_case.get("action", ""),
-        test_case.get("data_steps", ""),
-        test_case.get("expected_results", ""),
-        test_case.get("complexity", "Medium"),
-        test_case.get("priority", "Medium"),
-        config["assignee"],
-        config["label_release"],
-        config["automated_control"],
-        config["test_repository_path"],
-        config["crew"],
-        test_case.get("test_type", "Functional"),
-        config["test_design_status"]
-    ]
+    # Old format fallback — action is a string
+    action_text = test_case.get("action", "")
+    data_text = test_case.get("data_steps", "")
+    expected_text = test_case.get("expected_results", "")
+
+    # Try to split numbered steps from string
+    steps = []
+    if "1." in action_text:
+        lines = action_text.split("\n")
+        for i, line in enumerate(lines):
+            if line.strip():
+                clean = line.strip().lstrip(
+                    "0123456789.- ")
+                steps.append({
+                    "step_number": i + 1,
+                    "action": clean,
+                    "test_data": data_text if i == 0 else "",
+                    "expected": expected_text if i == len(
+                        lines) - 1 else ""
+                })
+    else:
+        steps = [{
+            "step_number": 1,
+            "action": action_text,
+            "test_data": data_text,
+            "expected": expected_text
+        }]
+
+    return steps
 
 
-def export_to_xray_csv(test_cases, story_title, config=None,
-                        output_dir=None):
+def export_to_xray_csv(test_cases, story_title,
+                        config=None, output_dir=None):
     """
-    Exports a list of test cases to an Xray-ready CSV file.
-    Returns the path to the generated CSV file.
+    Exports test cases to Xray Manual Test CSV format.
+    Each step becomes a separate row in the CSV.
     """
     if config is None:
         config = DEFAULT_CONFIG
@@ -89,107 +90,130 @@ def export_to_xray_csv(test_cases, story_title, config=None,
     if output_dir is None:
         output_dir = os.path.dirname(__file__)
 
-    # Generate timestamped filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_title = story_title.replace(" ", "_").replace("/", "-")
+    safe_title = story_title.replace(" ", "_").replace(
+        "/", "-")
     filename = f"xray_import_{safe_title}_{timestamp}.csv"
     filepath = os.path.join(output_dir, filename)
 
-    # Write CSV file
-    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+    with open(filepath, 'w', newline='',
+               encoding='utf-8') as f:
         writer = csv.writer(f)
-
-        # Write header row
         writer.writerow(XRAY_HEADERS)
 
-        # Write each test case as a row
         for tc in test_cases:
-            row = map_to_xray_row(tc, config)
-            writer.writerow(row)
+            steps = get_steps(tc)
+
+            if not steps:
+                steps = [{"step_number": 1,
+                           "action": "Execute test",
+                           "test_data": "",
+                           "expected": "Test passes"}]
+
+            # First step row — includes test case metadata
+            writer.writerow([
+                tc.get("tcid", ""),
+                "Test",
+                tc.get("summary", ""),
+                tc.get("priority", "Medium"),
+                tc.get("test_type", "Functional"),
+                config["assignee"],
+                config["label_release"],
+                config["test_repository_path"],
+                steps[0].get("action", ""),
+                steps[0].get("test_data", ""),
+                steps[0].get("expected", "")
+            ])
+
+            # Remaining step rows — metadata columns empty
+            for step in steps[1:]:
+                writer.writerow([
+                    "",  # Test ID
+                    "",  # Issue Type
+                    "",  # Test Summary
+                    "",  # Test Priority
+                    "",  # Test Type
+                    "",  # Assignee
+                    "",  # Labels
+                    "",  # Test Repo Path
+                    step.get("action", ""),
+                    step.get("test_data", ""),
+                    step.get("expected", "")
+                ])
 
     return filepath
 
 
-def display_csv_preview(filepath, max_rows=5):
-    """
-    Displays a preview of the generated CSV in the terminal.
-    Shows headers and first few rows.
-    """
-    print("\n📋 CSV Preview (first rows):")
-    print("-" * 80)
+def display_preview(filepath, max_tests=3):
+    """Shows preview of generated CSV with steps"""
+    print("\n📋 CSV Preview — Manual Test Format:")
+    print("-" * 70)
 
     with open(filepath, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
+        current_test = 0
+        step_count = 0
+
         for i, row in enumerate(reader):
             if i == 0:
-                # Header row
-                print(f"{'COLUMN':<25} {'VALUE'}")
-                print("-" * 80)
-            elif i <= max_rows:
-                # Data rows — show key fields only
-                print(f"\n  Row {i} — {row[0]}: {row[4][:50]}")
-                print(f"    Priority:    {row[10]}")
-                print(f"    Test Type:   {row[16]}")
-                print(f"    Complexity:  {row[9]}")
-            else:
-                remaining = sum(1 for _ in reader)
-                print(f"\n  ... and {remaining + 1} more rows")
-                break
+                continue
 
-    print("-" * 80)
+            if row[0] == "Test":
+                current_test += 1
+                step_count = 1
+                if current_test > max_tests:
+                    print("\n  ... more test cases in file")
+                    break
+                print(f"\n  📝 TC {current_test}: "
+                      f"{row[1][:50]}")
+                print(f"     Priority: {row[2]} | "
+                      f"Type: {row[3]}")
+                print(f"     Steps:")
+                print(f"       {step_count}. "
+                      f"{row[7][:55]}")
+            elif row[7] and current_test <= max_tests:
+                step_count += 1
+                print(f"       {step_count}. "
+                      f"{row[7][:55]}")
+
+    print("-" * 70)
 
 
-def run_full_export(story_title, test_cases_file=None):
-    """
-    Full pipeline: load test cases → export to CSV → display preview
-    """
+def run_full_export(story_title,
+                    test_cases_file=None):
+    """Full pipeline: load → export → preview"""
     print("=" * 60)
     print("SQAI-12 — Xray CSV Exporter")
+    print("Bug Fix SQAI-30 — Manual Test Step Format")
     print("=" * 60)
 
-    # Load test cases from JSON file
     if test_cases_file is None:
         test_cases_file = os.path.join(
             os.path.dirname(__file__),
             'generated_test_cases.json'
         )
 
-    print(f"\n📂 Loading test cases from: {test_cases_file}")
-
     with open(test_cases_file, 'r') as f:
         test_cases = json.load(f)
 
-    print(f"✅ Loaded {len(test_cases)} test cases")
+    print(f"\n✅ Loaded {len(test_cases)} test cases")
 
-    # Export to CSV
-    print(f"\n⚙️  Mapping {len(test_cases)} test cases to 18 Xray fields...")
     filepath = export_to_xray_csv(
         test_cases=test_cases,
-        story_title=story_title,
-        output_dir=os.path.dirname(__file__)
+        story_title=story_title
     )
 
-    print(f"✅ CSV generated: {os.path.basename(filepath)}")
-    print(f"📁 Location: {filepath}")
+    print(f"✅ CSV: {os.path.basename(filepath)}")
+    display_preview(filepath)
 
-    # Display preview
-    display_csv_preview(filepath)
-
-    # Summary
     print(f"\n{'=' * 60}")
-    print(f"✅ SQAI-12 Complete!")
-    print(f"   Test cases exported: {len(test_cases)}")
-    print(f"   Xray fields mapped:  {len(XRAY_HEADERS)}")
-    print(f"   File ready to import into JIRA Xray")
+    print(f"✅ Bug SQAI-30 Fixed!")
+    print(f"   Steps now exported as individual rows")
+    print(f"   Ready for Xray Manual Test import")
     print(f"{'=' * 60}")
-    print(f"\n🚀 Next step: Import this CSV into Xray")
-    print(f"   Apps → Xray → Test Case Importer → Upload CSV")
 
     return filepath
 
 
-# Run directly to generate CSV
 if __name__ == '__main__':
-    run_full_export(
-        story_title="Account_Balance_Display"
-    )
+    run_full_export("Account_Balance_Display")

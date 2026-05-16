@@ -1,49 +1,48 @@
 # Test Case Generator — SQAI-11
 # Purpose: Use Claude AI to generate structured test cases
-#          from a parsed JIRA story
 # Input:   Parsed story dictionary from story_parser.py
-# Output:  List of test case dictionaries ready for Xray CSV
+# Output:  List of test case dictionaries ready for CSV export
 # Author:  Sergio Juarez — SergioQE Portfolio
 
 import os
 import json
+import re
 import anthropic
 from dotenv import load_dotenv
 from story_parser import parse_story
 
-# Load API key from .env file
 load_dotenv()
 
 
 def generate_test_cases(parsed_story):
     """
     Sends parsed story to Claude AI and gets back
-    structured test cases covering all AC items.
-    Returns a list of test case dictionaries.
+    structured test cases. Uses simple flat JSON format
+    for reliability then processes steps in Python.
     """
-    # Initialize Claude AI client
     client = anthropic.Anthropic(
         api_key=os.getenv("ANTHROPIC_API_KEY")
     )
 
-    # Build the prompt from parsed story
     ac_items = "\n".join([
         f"{i+1}. {ac}"
-        for i, ac in enumerate(parsed_story["ACCEPTANCE CRITERIA"])
+        for i, ac in enumerate(
+            parsed_story["ACCEPTANCE CRITERIA"])
     ])
 
     tech_notes = "\n".join([
         f"- {note}"
-        for note in parsed_story.get("TECHNICAL NOTES", [])
+        for note in parsed_story.get(
+            "TECHNICAL NOTES", [])
     ])
 
-    prompt = f"""You are a senior QA Engineer specializing in 
-banking and fintech applications.
+    prompt = f"""You are a senior QA Engineer specializing 
+in banking and fintech applications.
 
-Analyze this JIRA story and generate comprehensive test cases:
+Analyze this JIRA story and generate comprehensive 
+test cases:
 
 STORY TITLE: {parsed_story["TITLE"]}
-
 USER STORY: {parsed_story["USER STORY"]}
 
 ACCEPTANCE CRITERIA:
@@ -52,29 +51,26 @@ ACCEPTANCE CRITERIA:
 TECHNICAL NOTES:
 {tech_notes}
 
-Generate test cases that cover:
-1. Positive scenarios (happy path for each AC item)
-2. Negative scenarios (invalid inputs, errors, failures)
-3. Edge cases (boundary values, empty fields, special characters)
-4. Security scenarios (unauthorized access, injection attempts)
-
 Return ONLY a JSON array. No explanations. No markdown.
 Each test case must have these exact fields:
 - tcid: string (TC-001, TC-002, etc.)
 - summary: string (concise test case title)
 - description: string (what this test validates)
-- action: string (numbered steps: 1. Do this\\n2. Do that)
-- data_steps: string (test data needed)
-- expected_results: string (what should happen)
+- action: string (steps separated by | like this:
+  "Navigate to login page|Enter valid credentials|Click Sign In|Verify dashboard loads")
+- test_data: string (all test data needed)
+- expected_results: string (overall expected result)
 - complexity: string (Low, Medium, or High)
 - priority: string (Low, Medium, High, or Critical)
-- test_type: string (Functional, Negative, Edge Case, 
+- test_type: string (Functional, Negative, Edge Case,
   Security, or Regression)
 
-Generate minimum 10 test cases maximum 15.
-Cover ALL acceptance criteria items."""
+IMPORTANT: Use | to separate steps in the action field.
+Do NOT use newlines inside field values.
+Generate minimum 10 maximum 15 test cases.
+Cover ALL acceptance criteria items.
+Include positive, negative, edge case and security tests."""
 
-    # Call Claude AI
     message = client.messages.create(
         model="claude-opus-4-5",
         max_tokens=4096,
@@ -83,57 +79,104 @@ Cover ALL acceptance criteria items."""
         ]
     )
 
-    # Parse the JSON response
     response_text = message.content[0].text
 
-    # Clean response in case of any markdown
-    clean_response = response_text.strip()
-    if clean_response.startswith("```"):
-        lines = clean_response.split("\n")
-        clean_response = "\n".join(lines[1:-1])
+    # Extract JSON array from response
+    clean = response_text.strip()
 
-    test_cases = json.loads(clean_response)
+    # Remove markdown if present
+    if "```json" in clean:
+        clean = clean.split("```json")[1].split(
+            "```")[0].strip()
+    elif "```" in clean:
+        clean = clean.split("```")[1].split(
+            "```")[0].strip()
+
+    # Find array boundaries
+    start = clean.find("[")
+    end = clean.rfind("]") + 1
+    if start != -1 and end > 0:
+        clean = clean[start:end]
+
+    # Remove control characters
+    clean = re.sub(
+        r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]',
+        ' ', clean)
+
+    test_cases = json.loads(clean)
+
+    # Convert pipe-separated action into steps list
+    for tc in test_cases:
+        action_text = tc.get("action", "")
+        if "|" in action_text:
+            step_list = [s.strip() for s in
+                         action_text.split("|")
+                         if s.strip()]
+        elif "\n" in action_text:
+            step_list = [s.strip().lstrip(
+                "0123456789.- ")
+                for s in action_text.split("\n")
+                if s.strip()]
+        else:
+            step_list = [action_text]
+
+        # Build structured steps
+        steps = []
+        for i, step_text in enumerate(step_list):
+            steps.append({
+                "step_number": i + 1,
+                "action": step_text,
+                "test_data": tc.get(
+                    "test_data", "") if i == 0 else "",
+                "expected": tc.get(
+                    "expected_results", "")
+                if i == len(step_list) - 1 else ""
+            })
+
+        tc["steps"] = steps
+
     return test_cases
 
 
 def generate_and_display(story_file):
-    """
-    Full pipeline: parse story → generate test cases → display
-    """
+    """Full pipeline: parse → generate → display"""
     print("=" * 60)
     print("SQAI-11 — AI Test Case Generator")
     print("=" * 60)
 
-    # Step 1: Parse the story
     print("\n📖 Parsing story...")
     parsed = parse_story(story_file)
     print(f"   Title: {parsed['TITLE']}")
-    print(f"   AC items found: {len(parsed['ACCEPTANCE CRITERIA'])}")
+    print(f"   AC items found: "
+          f"{len(parsed['ACCEPTANCE CRITERIA'])}")
 
-    # Step 2: Generate test cases
     print("\n🤖 Calling Claude AI to generate test cases...")
     print("   This takes 10-20 seconds...")
     test_cases = generate_test_cases(parsed)
 
-    # Step 3: Display results
     print(f"\n✅ Generated {len(test_cases)} test cases!\n")
     print("=" * 60)
 
     for tc in test_cases:
+        steps = tc.get("steps", [])
         print(f"\n{tc['tcid']} — {tc['summary']}")
         print(f"   Type:       {tc['test_type']}")
         print(f"   Priority:   {tc['priority']}")
-        print(f"   Complexity: {tc['complexity']}")
-        print(f"   Expected:   {tc['expected_results'][:80]}...")
+        print(f"   Steps:      {len(steps)}")
+        if steps:
+            print(f"   Step 1:     "
+                  f"{steps[0]['action'][:55]}")
 
     print("\n" + "=" * 60)
-    print(f"Total: {len(test_cases)} test cases generated")
+    print(f"Total: {len(test_cases)} test cases")
+    total_steps = sum(
+        len(tc.get("steps", [])) for tc in test_cases)
+    print(f"Total steps: {total_steps}")
     print("Ready for Xray CSV export (SQAI-12)")
 
     return test_cases
 
 
-# Run directly to test the generator
 if __name__ == '__main__':
     story_path = os.path.join(
         os.path.dirname(__file__),
@@ -142,7 +185,6 @@ if __name__ == '__main__':
     )
     results = generate_and_display(story_path)
 
-    # Save raw output for inspection
     output_path = os.path.join(
         os.path.dirname(__file__),
         'generated_test_cases.json'
